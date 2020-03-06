@@ -1,69 +1,49 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import './Range.css';
 
-export default class Range extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            thumbs: [0, 100],
-            colors: [],
-            activeI: 0,
-            gradient: [
-                {
-                    value: 0,
-                    color: this.hexToRgb(this.indexLow),
-                },
-                {
-                    value: 50,
-                    color: this.hexToRgb(this.indexMedium),
-                },
-                {
-                    value: 100,
-                    color: this.hexToRgb(this.indexHigh),
-                }
-            ]
-        }
-    }
-
-    indexLow = '#ff0624';
-    indexMedium = '#ffd306';
-    indexHigh = '#008209';
-    min = 0;
-    max = 100;
-    minSizeNear = 5;
-
-    rangeStyles() {
-        const gradient = this.state.gradient.map(({ value, color }) => color && `rgb(${color.join(', ')}) ${value}%`);
+const useStyles = ({ gradient, thumbs, colors }) => {
+    const rangeStyles = () => {
+        const gradientMap = gradient.map(({ value, color }) => color && `rgb(${color.join(', ')}) ${value}%`);
         const direction = 'to right';
 
         return {
-            background: `linear-gradient(${direction}, ${gradient.join(', ')})`,
+            background: `linear-gradient(${direction}, ${gradientMap.join(', ')})`,
         }
-    }
+    };
 
-    thumbStyles(i) {
+    const thumbStyles = (i) => {
         return {
-            left: `${this.state.thumbs[i]}%`,
-            borderColor: this.state.colors[i],
+            left: `${thumbs[i]}%`,
+            borderColor: colors[i],
         }
-    }
+    };
 
-    thumbValueStyles(i) {
-        return { color: this.state.colors[i] };
-    }
+    const thumbValueStyles = (i) => {
+        return { color: colors[i] };
+    };
 
-    setColors() {
-        const colors = [...this.state.colors];
-        this.state.thumbs.forEach((value, index) => {
-            colors[index] = this.calculateColor(value);
+    return {
+        rangeStyles,
+        thumbStyles,
+        thumbValueStyles
+    }
+};
+
+const useColors = ({ thumbs, gradient, thumbSize }) => {
+    const [colors, setColors] = useState([]);
+
+    const initColors = () => {
+        const colorsLocal = [...colors];
+        thumbs.forEach((value, index) => {
+            colorsLocal[index] = calculateColor(value);
         });
-        this.setState({ ...this.state, colors });
-    }
+        setColors(colorsLocal);
+    };
 
-    calculateColor(colorValue) {
+    const calculateColor = (colorValue) => {
         const colorRange = {};
-        for (let i = 0; i < this.state.gradient.length; i += 1) {
-            const { value } = this.state.gradient[i];
+        for (let i = 0; i < gradient.length; i += 1) {
+            const { value } = gradient[i];
             if (colorValue <= value && value !== 0) {
                 colorRange.firstI = i - 1;
                 colorRange.secondI = i;
@@ -71,20 +51,19 @@ export default class Range extends React.Component {
             }
         }
 
-        const sliderWidth = this.refRange.offsetWidth;
-        const firstColor = this.state.gradient[colorRange.firstI].color;
-        const secondColor = this.state.gradient[colorRange.secondI].color;
+        const firstColor = gradient[colorRange.firstI].color;
+        const secondColor = gradient[colorRange.secondI].color;
 
-        const firstColorX = sliderWidth * (this.state.gradient[colorRange.firstI].value / 100);
-        const secondColorX = (sliderWidth * (this.state.gradient[colorRange.secondI].value / 100))
+        const firstColorX = thumbSize * (gradient[colorRange.firstI].value / 100);
+        const secondColorX = (thumbSize * (gradient[colorRange.secondI].value / 100))
             - firstColorX;
-        const sliderX = sliderWidth * (colorValue / 100) - firstColorX;
+        const sliderX = thumbSize * (colorValue / 100) - firstColorX;
         const ratio = sliderX / secondColorX;
 
-        return `rgb(${this.pickHex(secondColor, firstColor, ratio).join(',')})`;
-    }
+        return `rgb(${pickHex(secondColor, firstColor, ratio).join(',')})`;
+    };
 
-    pickHex(color1, color2, weight) {
+    const pickHex = (color1, color2, weight) => {
         const w = weight * 2 - 1;
         const w1 = (w + 1) / 2;
         const w2 = 1 - w1;
@@ -94,51 +73,66 @@ export default class Range extends React.Component {
             Math.round(color1[1] * w1 + color2[1] * w2),
             Math.round(color1[2] * w1 + color2[2] * w2),
         ];
-    }
+    };
 
-    hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    useEffect(initColors, []);
 
-        return result ? [
-            parseInt(result[1], 16), // r
-            parseInt(result[2], 16), // g
-            parseInt(result[3], 16), // b
-        ] : [255, 255, 255];
-    }
+    return colors;
+};
 
-    componentDidMount() {
-        this.setColors();
-    }
+const Range = () => {
+    const min = 0;
+    const max = 100;
 
-    render() {
-        return (
-            <div className='wrapper'>
-                <div className='container'>
-                    <div
-                        className='range'
-                        style={this.rangeStyles()}
-                        ref={(node) => this.refRange = node}
-                    />
-                    {this.state.thumbs.map((value, index) => (
-                        <button
-                            className='thumb'
-                            key={index}
-                            style={this.thumbStyles(index)}
+    const thumbSize = 18;
+    const thumbs = [0, 100];
+    const gradient = [
+        {
+            value: 0,
+            color: [255, 6, 36],
+        },
+        {
+            value: 50,
+            color: [255, 211, 6],
+        },
+        {
+            value: 100,
+            color: [0, 130, 9],
+        }
+    ];
+
+    const colors = useColors({ gradient, thumbs, thumbSize });
+
+    const { rangeStyles, thumbStyles, thumbValueStyles } = useStyles({ gradient, thumbs, colors });
+
+    return (
+        <div className='wrapper'>
+            <div className='container'>
+                <div
+                    className='range'
+                    style={rangeStyles()}
+                />
+                {thumbs.map((value, index) => (
+                    <button
+                        className='thumb'
+                        key={index}
+                        style={thumbStyles(index)}
+                    >
+                        <span
+                            className='value'
+                            style={thumbValueStyles(index)}
                         >
-                            <span
-                                className='value'
-                                style={this.thumbValueStyles(index)}
-                            >
-                                { value }
-                            </span>
-                        </button>
-                    ))}
-                </div>
-                <div className='limits'>
-                    <span className='limit'>{ this.min }</span>
-                    <span className='limit'>{ this.max }</span>
-                </div>
+                            { value }
+                        </span>
+                    </button>
+                ))}
             </div>
-        );
-    }
-}
+            <div className='limits'>
+                <span className='limit'>{ min }</span>
+                <span className='limit'>{ max }</span>
+            </div>
+        </div>
+    );
+};
+
+export default Range;
