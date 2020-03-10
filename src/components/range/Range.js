@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import './Range.css';
 
 const useStyles = ({ gradient, thumbs, colors }) => {
@@ -27,6 +27,71 @@ const useStyles = ({ gradient, thumbs, colors }) => {
         thumbStyles,
         thumbValueStyles
     }
+};
+
+const useListeners = ({ thumbs, setThumbs, minSizeNear, min, max, refRange }) => {
+    let activeI = 0;
+
+    const addEventListenerOnce = (eventName, cb) => {
+        const once = (event) => {
+            cb(event);
+            document.removeEventListener(eventName, once);
+        };
+        document.addEventListener(eventName, once);
+    };
+
+    const thumbPosOverlapping = (position) => {
+        let pos = position;
+
+        // for first
+        if (activeI - 1 >= 0
+            && thumbs[activeI - 1] + minSizeNear > pos) {
+            pos = thumbs[activeI - 1] + minSizeNear;
+        }
+        // for last
+        if (activeI + 1 < thumbs.length
+            && thumbs[activeI + 1] - minSizeNear < pos) {
+            pos = thumbs[activeI + 1] - minSizeNear;
+        }
+
+        return pos;
+    };
+
+    const parseMouseMove = (event) => {
+        const start = 'left';
+        const length = 'width';
+        const click = 'clientX';
+
+        const {
+            [start]: trackStart,
+            [length]: trackLength
+        } = refRange.current.getBoundingClientRect();
+
+        const clickOffset = event[click];
+        const clickPos = Math.min(Math.max((clickOffset - trackStart) / trackLength, 0), 1) || 0;
+
+        return min + clickPos * (max - min);
+    };
+
+    const onMouseMove = (event) => {
+        const pos = thumbPosOverlapping(parseMouseMove(event));
+
+        const newThumbs = [...thumbs];
+        newThumbs[activeI] = Math.round(pos);
+        setThumbs(newThumbs);
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+    };
+
+    const onThumbMouseDown = (event, index) => {
+        activeI = index;
+        document.addEventListener('mousemove', onMouseMove);
+        addEventListenerOnce('mouseup', onMouseUp);
+    };
+
+    return { onThumbMouseDown };
 };
 
 const useColors = ({ thumbs, gradient, thumbSize }) => {
@@ -75,9 +140,11 @@ const useColors = ({ thumbs, gradient, thumbSize }) => {
         ];
     };
 
-    useEffect(initColors, []);
+    useEffect(() => {
+        initColors();
+    }, [thumbs]);
 
-    return colors;
+    return { colors };
 };
 
 const Range = () => {
@@ -85,7 +152,7 @@ const Range = () => {
     const max = 100;
 
     const thumbSize = 18;
-    const thumbs = [0, 100];
+    const minSizeNear = 5;
     const gradient = [
         {
             value: 0,
@@ -101,13 +168,16 @@ const Range = () => {
         }
     ];
 
-    const colors = useColors({ gradient, thumbs, thumbSize });
+    const [thumbs, setThumbs] = useState([0, 100]);
+    const refRange = useRef(null);
 
+    const { colors } = useColors({ gradient, thumbs, thumbSize });
     const { rangeStyles, thumbStyles, thumbValueStyles } = useStyles({ gradient, thumbs, colors });
+    const { onThumbMouseDown } = useListeners({ thumbs, setThumbs, minSizeNear, min, max, refRange });
 
     return (
         <div className='wrapper'>
-            <div className='container'>
+            <div className='container' ref={refRange}>
                 <div
                     className='range'
                     style={rangeStyles()}
@@ -117,6 +187,7 @@ const Range = () => {
                         className='thumb'
                         key={index}
                         style={thumbStyles(index)}
+                        onMouseDown={(e) => { onThumbMouseDown(e, index) }}
                     >
                         <span
                             className='value'
